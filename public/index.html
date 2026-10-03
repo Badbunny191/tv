@@ -47,7 +47,7 @@
         <input 
           type="text" 
           id="searchInput" 
-          placeholder="ค้นหาชื่อช่อง..." 
+          placeholder="ค้นหาชื่อช่อง... (ปุ่มคีย์ลัด: Space, F)" 
           class="w-full bg-gray-950 border border-gray-700 text-sm rounded-xl pl-10 pr-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-rose-500 transition"
         >
       </div>
@@ -56,21 +56,14 @@
     <!-- Category Tabs -->
     <div class="max-w-7xl mx-auto mt-4">
       <div id="categoryContainer" class="flex gap-2 overflow-x-auto pb-1 custom-scroll">
-        <button class="category-btn active px-4 py-1.5 rounded-full text-xs font-medium bg-rose-600 text-white whitespace-nowrap shadow-sm" data-category="ALL">
-          ทั้งหมด
-        </button>
+        <!-- Rendered dynamically -->
       </div>
     </div>
   </header>
 
   <!-- Main Content -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
-    <!-- Status & Alerts -->
-    <div id="loadingStatus" class="flex flex-col items-center justify-center py-20 text-gray-400">
-      <i class="fa-solid fa-circle-notch fa-spin text-4xl text-rose-500 mb-4"></i>
-      <p class="text-sm">กำลังดึงรายการช่องจาก GitHub...</p>
-    </div>
-
+    <!-- Error Alert -->
     <div id="errorAlert" class="hidden max-w-xl mx-auto mb-6 p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-xs">
       <div class="flex items-center gap-2 font-bold mb-1">
         <i class="fa-solid fa-triangle-exclamation"></i>
@@ -79,13 +72,16 @@
       <p id="errorMessage" class="mb-2">ไม่สามารถดึงข้อมูลสดได้</p>
     </div>
 
+    <!-- Empty State -->
     <div id="emptyStatus" class="hidden flex-col items-center justify-center py-20 text-gray-500">
       <i class="fa-solid fa-satellite-dish text-4xl mb-4"></i>
       <p class="text-sm">ไม่พบช่องที่ตรงกับคำค้นหาหรือหมวดหมู่นี้</p>
     </div>
 
     <!-- Channels Grid -->
-    <div id="channelsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"></div>
+    <div id="channelsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <!-- Loading Skeletons rendered by default -->
+    </div>
   </main>
 
   <!-- Video Player Modal -->
@@ -96,14 +92,33 @@
         <div class="flex items-center gap-3">
           <img id="currentChannelLogo" src="" alt="logo" class="w-7 h-7 object-contain rounded bg-gray-800 p-0.5">
           <div>
-            <h3 id="currentChannelName" class="text-sm font-semibold text-white truncate max-w-xs md:max-w-md">ชื่อช่อง</h3>
+            <div class="flex items-center gap-2">
+              <h3 id="currentChannelName" class="text-sm font-semibold text-white truncate max-w-xs md:max-w-md">ชื่อช่อง</h3>
+              <button id="modalFavBtn" class="text-gray-400 hover:text-amber-400 transition text-sm">
+                <i class="fa-regular fa-star"></i>
+              </button>
+            </div>
             <p id="currentChannelGroup" class="text-xs text-gray-400">หมวดหมู่</p>
           </div>
         </div>
+
         <div class="flex items-center gap-2">
+          <!-- Quality Selector -->
+          <select id="qualitySelect" class="text-xs bg-gray-800 text-gray-300 border border-gray-700 rounded px-2 py-1 focus:outline-none hidden">
+            <option value="-1">Auto</option>
+          </select>
+
+          <!-- PiP Button -->
+          <button id="pipBtn" title="Picture in Picture" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1 rounded border border-gray-700 transition">
+            <i class="fa-solid fa-clone"></i>
+          </button>
+
+          <!-- Direct / Proxy Toggle -->
           <button id="toggleDirectBtn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1 rounded border border-gray-700 transition">
             สลับเล่นผ่าน Proxy
           </button>
+
+          <!-- Close Modal -->
           <button id="closeModalBtn" class="text-gray-400 hover:text-white p-2 rounded-lg transition">
             <i class="fa-solid fa-xmark text-lg"></i>
           </button>
@@ -120,7 +135,7 @@
 
         <div id="playerErrorOverlay" class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center p-6 text-center hidden">
           <i class="fa-solid fa-triangle-exclamation text-rose-500 text-3xl mb-2"></i>
-          <p class="text-sm font-medium text-white mb-2">สัญญาณช่องนี้กำลังออฟไลน์ หรือเซิร์ฟเวอร์ปลายทางปฏิเสธการเชื่อมต่อ</p>
+          <p class="text-sm font-medium text-white mb-2">สัญญาณช่องนี้กำลังออฟไลน์ หรือเซิร์ฟเวอร์ปฏิเสธการเชื่อมต่อ</p>
           <p id="debugErrorText" class="text-xs text-gray-400 mb-4 max-w-md break-all"></p>
           <button id="retryPlayBtn" class="text-xs bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg font-medium transition">
             ลองเชื่อมต่อใหม่
@@ -135,13 +150,22 @@
     let channels = [];
     let activeCategory = 'ALL';
     let hlsInstance = null;
+    let currentChannelData = null;
     let currentRawStreamUrl = '';
     let isDirectMode = true;
     let hasAutoFallbackTriggered = false;
+    let searchTimeout = null;
+
+    // Local Storage Keys
+    const FAVORITES_KEY = 'badbunnytv_favs';
+    const HISTORY_KEY = 'badbunnytv_history';
+    const VOLUME_KEY = 'badbunnytv_volume';
+
+    let favorites = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
+    let history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
 
     // Elements
     const channelsGrid = document.getElementById('channelsGrid');
-    const loadingStatus = document.getElementById('loadingStatus');
     const emptyStatus = document.getElementById('emptyStatus');
     const errorAlert = document.getElementById('errorAlert');
     const errorMessage = document.getElementById('errorMessage');
@@ -155,17 +179,42 @@
     const currentChannelLogo = document.getElementById('currentChannelLogo');
     const currentChannelName = document.getElementById('currentChannelName');
     const currentChannelGroup = document.getElementById('currentChannelGroup');
+    const modalFavBtn = document.getElementById('modalFavBtn');
+    const qualitySelect = document.getElementById('qualitySelect');
+    const pipBtn = document.getElementById('pipBtn');
     const playerErrorOverlay = document.getElementById('playerErrorOverlay');
     const playerBuffering = document.getElementById('playerBuffering');
     const debugErrorText = document.getElementById('debugErrorText');
     const toggleDirectBtn = document.getElementById('toggleDirectBtn');
     const retryPlayBtn = document.getElementById('retryPlayBtn');
 
+    // Initialize Volume
+    const savedVolume = localStorage.getItem(VOLUME_KEY);
+    if (savedVolume !== null) {
+      videoPlayer.volume = parseFloat(savedVolume);
+    }
+    videoPlayer.addEventListener('volumechange', () => {
+      localStorage.setItem(VOLUME_KEY, videoPlayer.volume.toString());
+    });
+
+    function showSkeletons() {
+      channelsGrid.innerHTML = '';
+      for (let i = 0; i < 12; i++) {
+        const skeleton = document.createElement('div');
+        skeleton.className = 'bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-col items-center animate-pulse';
+        skeleton.innerHTML = `
+          <div class="w-full aspect-[4/3] bg-gray-800 rounded-lg mb-3"></div>
+          <div class="w-3/4 h-3 bg-gray-800 rounded mb-2"></div>
+          <div class="w-1/2 h-2.5 bg-gray-800 rounded"></div>
+        `;
+        channelsGrid.appendChild(skeleton);
+      }
+    }
+
     async function fetchPlaylist() {
-      loadingStatus.classList.remove('hidden');
+      showSkeletons();
       errorAlert.classList.add('hidden');
       emptyStatus.classList.add('hidden');
-      channelsGrid.innerHTML = '';
 
       let textData = null;
 
@@ -175,7 +224,7 @@
           textData = await res.text();
         }
       } catch (err) {
-        console.warn('Direct fetch playlist failed:', err);
+        console.warn('Direct fetch failed, trying proxy...', err);
       }
 
       if (!textData) {
@@ -186,17 +235,16 @@
             textData = await resProxy.text();
           }
         } catch (proxyErr) {
-          console.error('Proxy fetch playlist failed:', proxyErr);
+          console.error('Proxy fetch failed:', proxyErr);
         }
       }
-
-      loadingStatus.classList.add('hidden');
 
       if (textData) {
         parseM3U(textData);
         renderCategories();
         renderChannels();
       } else {
+        channelsGrid.innerHTML = '';
         errorMessage.textContent = 'ไม่สามารถดึงไฟล์ M3U จาก GitHub ได้';
         errorAlert.classList.remove('hidden');
       }
@@ -231,23 +279,64 @@
       }
     }
 
+    function toggleFavorite(channelName, e) {
+      if (e) e.stopPropagation();
+      const index = favorites.indexOf(channelName);
+      if (index === -1) {
+        favorites.push(channelName);
+      } else {
+        favorites.splice(index, 1);
+      }
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+      updateFavIcons();
+      if (activeCategory === 'FAVORITES') {
+        renderChannels();
+      }
+    }
+
+    function addToHistory(channel) {
+      history = history.filter(item => item.name !== channel.name);
+      history.unshift({ name: channel.name, logo: channel.logo, group: channel.group, url: channel.url });
+      if (history.length > 20) history.pop();
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    }
+
+    function updateFavIcons() {
+      document.querySelectorAll('[data-fav-target]').forEach(btn => {
+        const name = btn.dataset.favTarget;
+        const isFav = favorites.includes(name);
+        btn.innerHTML = `<i class="fa-${isFav ? 'solid text-amber-400' : 'regular text-gray-400'} fa-star"></i>`;
+      });
+      if (currentChannelData) {
+        const isFav = favorites.includes(currentChannelData.name);
+        modalFavBtn.innerHTML = `<i class="fa-${isFav ? 'solid text-amber-400' : 'regular text-gray-400'} fa-star"></i>`;
+      }
+    }
+
     function renderCategories() {
-      const groups = ['ALL', ...new Set(channels.map(c => c.group).filter(Boolean))];
+      const standardGroups = [...new Set(channels.map(c => c.group).filter(Boolean))];
+      const categories = [
+        { id: 'ALL', label: 'ทั้งหมด' },
+        { id: 'FAVORITES', label: '⭐ รายการโปรด' },
+        { id: 'HISTORY', label: '🕒 ดูก่อนหน้า' },
+        ...standardGroups.map(g => ({ id: g, label: g }))
+      ];
+
       categoryContainer.innerHTML = '';
 
-      groups.forEach(group => {
+      categories.forEach(cat => {
         const btn = document.createElement('button');
-        const isActive = activeCategory === group;
+        const isActive = activeCategory === cat.id;
         btn.className = `category-btn px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${
           isActive 
             ? 'bg-rose-600 text-white shadow-sm' 
             : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
         }`;
-        btn.textContent = group === 'ALL' ? 'ทั้งหมด' : group;
-        btn.dataset.category = group;
+        btn.textContent = cat.label;
+        btn.dataset.category = cat.id;
 
         btn.addEventListener('click', () => {
-          activeCategory = group;
+          activeCategory = cat.id;
           document.querySelectorAll('.category-btn').forEach(b => {
             b.className = 'category-btn px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition bg-gray-800 text-gray-300 hover:bg-gray-700';
           });
@@ -261,8 +350,16 @@
 
     function renderChannels() {
       const searchTerm = searchInput.value.toLowerCase().trim();
-      const filtered = channels.filter(c => {
-        const matchesCategory = activeCategory === 'ALL' || c.group === activeCategory;
+      let sourceList = channels;
+
+      if (activeCategory === 'FAVORITES') {
+        sourceList = channels.filter(c => favorites.includes(c.name));
+      } else if (activeCategory === 'HISTORY') {
+        sourceList = history;
+      }
+
+      const filtered = sourceList.filter(c => {
+        const matchesCategory = activeCategory === 'ALL' || activeCategory === 'FAVORITES' || activeCategory === 'HISTORY' || c.group === activeCategory;
         const matchesSearch = c.name.toLowerCase().includes(searchTerm);
         return matchesCategory && matchesSearch;
       });
@@ -277,12 +374,17 @@
 
       filtered.forEach(ch => {
         const card = document.createElement('div');
-        card.className = 'group bg-gray-900 border border-gray-800 hover:border-rose-500/60 rounded-xl p-3 flex flex-col items-center justify-between cursor-pointer transition transform hover:-translate-y-1 hover:shadow-lg hover:shadow-rose-950/20';
+        card.className = 'group relative bg-gray-900 border border-gray-800 hover:border-rose-500/60 rounded-xl p-3 flex flex-col items-center justify-between cursor-pointer transition transform hover:-translate-y-1 hover:shadow-lg hover:shadow-rose-950/20';
 
         const fallbackImg = `https://placehold.co/120x80/1f2937/9ca3af?text=${encodeURIComponent(ch.name.slice(0, 4))}`;
         const logoSrc = ch.logo || fallbackImg;
+        const isFav = favorites.includes(ch.name);
 
         card.innerHTML = `
+          <button class="absolute top-2 right-2 p-1.5 rounded-full bg-gray-950/70 hover:bg-gray-800 transition z-10" data-fav-target="${ch.name}">
+            <i class="fa-${isFav ? 'solid text-amber-400' : 'regular text-gray-400'} fa-star"></i>
+          </button>
+
           <div class="w-full aspect-[4/3] bg-gray-950 rounded-lg flex items-center justify-center p-3 mb-3 overflow-hidden">
             <img 
               src="${logoSrc}" 
@@ -302,21 +404,28 @@
           </div>
         `;
 
+        const favBtn = card.querySelector(`[data-fav-target="${ch.name}"]`);
+        favBtn.addEventListener('click', (e) => toggleFavorite(ch.name, e));
+
         card.addEventListener('click', () => openPlayer(ch));
         channelsGrid.appendChild(card);
       });
     }
 
     function openPlayer(channel) {
+      currentChannelData = channel;
       currentRawStreamUrl = channel.url;
       isDirectMode = true;
       hasAutoFallbackTriggered = false;
+
       currentChannelName.textContent = channel.name;
       currentChannelGroup.textContent = channel.group;
       currentChannelLogo.src = channel.logo || `https://placehold.co/40x40/1f2937/9ca3af?text=TV`;
       
       toggleDirectBtn.textContent = 'สลับเล่นผ่าน Proxy';
       playerErrorOverlay.classList.add('hidden');
+      updateFavIcons();
+      addToHistory(channel);
       playerModal.classList.remove('hidden');
 
       initiatePlayback();
@@ -333,6 +442,8 @@
     function playStream(url) {
       playerErrorOverlay.classList.add('hidden');
       playerBuffering.classList.remove('hidden');
+      qualitySelect.classList.add('hidden');
+      qualitySelect.innerHTML = '<option value="-1">Auto</option>';
 
       if (hlsInstance) {
         hlsInstance.destroy();
@@ -350,16 +461,26 @@
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(videoPlayer);
 
-        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
           playerBuffering.classList.add('hidden');
           videoPlayer.play().catch(e => console.log('Autoplay handled:', e));
+
+          // Setup Quality Selector
+          if (hlsInstance.levels.length > 1) {
+            qualitySelect.classList.remove('hidden');
+            hlsInstance.levels.forEach((level, index) => {
+              const opt = document.createElement('option');
+              opt.value = index;
+              opt.textContent = `${level.height}p`;
+              qualitySelect.appendChild(opt);
+            });
+          }
         });
 
         hlsInstance.on(Hls.Events.ERROR, (event, data) => {
           if (data.fatal) {
             console.error('Fatal HLS Error:', data);
             
-            // หากเล่นตรงแล้วเจ๊ง ให้สลับไปลองผ่าน Proxy ทันทีอัตโนมัติ
             if (isDirectMode && !hasAutoFallbackTriggered) {
               console.warn('Direct stream failed, falling back to Proxy automatically...');
               hasAutoFallbackTriggered = true;
@@ -401,6 +522,9 @@
 
     function closePlayer() {
       playerModal.classList.add('hidden');
+      if (document.pictureInPictureElement) {
+        document.exitPictureInPicture().catch(() => {});
+      }
       if (hlsInstance) {
         hlsInstance.destroy();
         hlsInstance = null;
@@ -409,9 +533,70 @@
       videoPlayer.src = '';
     }
 
+    // Quality Select Listener
+    qualitySelect.addEventListener('change', (e) => {
+      if (hlsInstance) {
+        hlsInstance.currentLevel = parseInt(e.target.value, 10);
+      }
+    });
+
+    // Picture in Picture Listener
+    pipBtn.addEventListener('click', async () => {
+      try {
+        if (videoPlayer !== document.pictureInPictureElement) {
+          await videoPlayer.requestPictureInPicture();
+        } else {
+          await document.exitPictureInPicture();
+        }
+      } catch (err) {
+        console.error('PiP Error:', err);
+      }
+    });
+
+    // Favorite button inside Modal
+    modalFavBtn.addEventListener('click', () => {
+      if (currentChannelData) {
+        toggleFavorite(currentChannelData.name);
+      }
+    });
+
+    // Debounced Search
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(renderChannels, 250);
+    });
+
+    // Keyboard Shortcuts (Space = Play/Pause, F = Fullscreen)
+    document.addEventListener('keydown', (e) => {
+      // ไม่ยิงคำสั่งคีย์ลัดถ้ากำลังพิมพ์อยู่ในช่องค้นหา
+      if (document.activeElement === searchInput) return;
+
+      if (e.key === 'Escape' && !playerModal.classList.contains('hidden')) {
+        closePlayer();
+      } else if (e.code === 'Space' && !playerModal.classList.contains('hidden')) {
+        e.preventDefault();
+        if (videoPlayer.paused) {
+          videoPlayer.play();
+        } else {
+          videoPlayer.pause();
+        }
+      } else if ((e.key === 'f' || e.key === 'F') && !playerModal.classList.contains('hidden')) {
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          videoPlayer.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
+    });
+
+    // Clean up on beforeunload
+    window.addEventListener('beforeunload', () => {
+      if (hlsInstance) hlsInstance.destroy();
+    });
+
     // Event Listeners
     closeModalBtn.addEventListener('click', closePlayer);
-    searchInput.addEventListener('input', renderChannels);
     refreshBtn.addEventListener('click', fetchPlaylist);
 
     toggleDirectBtn.addEventListener('click', () => {
@@ -422,13 +607,7 @@
 
     retryPlayBtn.addEventListener('click', initiatePlayback);
 
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !playerModal.classList.contains('hidden')) {
-        closePlayer();
-      }
-    });
-
-    // เริ่มต้นทำงาน
+    // Initial Load
     fetchPlaylist();
   </script>
 </body>

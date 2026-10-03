@@ -1,0 +1,13 @@
+name = "tv-proxy"
+main = "functions/proxy.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+# ตั้งค่า vars ถ้าต้องการ
+
+# สำหรับ Preview และ Production
+[env.production]
+name = "tv-proxy"
+
+[env.preview]
+name = "tv-proxy-preview"
