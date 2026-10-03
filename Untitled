@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Badbunny TV - Smart Live Stream</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0b0f19">
@@ -14,23 +14,23 @@
       background-color: #0b0f19;
       color: #f3f4f6;
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-tap-highlight-color: transparent;
     }
     .custom-scroll::-webkit-scrollbar {
-      height: 6px;
-      width: 6px;
+      display: none;
     }
-    .custom-scroll::-webkit-scrollbar-track {
-      background: #111827;
-    }
-    .custom-scroll::-webkit-scrollbar-thumb {
-      background: #374151;
-      border-radius: 9999px;
+    .custom-scroll {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
     }
     .tv-focused {
       border-color: #f43f5e !important;
       transform: scale(1.04) !important;
       box-shadow: 0 0 20px rgba(244, 63, 94, 0.4) !important;
       outline: none;
+    }
+    video::-webkit-media-controls-panel {
+      z-index: 1;
     }
   </style>
 </head>
@@ -73,20 +73,17 @@
 
     <!-- Category Tabs -->
     <div class="max-w-7xl mx-auto mt-3">
-      <div id="categoryContainer" class="flex gap-2 overflow-x-auto pb-1 custom-scroll">
-        <!-- Rendered dynamically -->
-      </div>
+      <div id="categoryContainer" class="flex gap-2 overflow-x-auto pb-1 custom-scroll"></div>
     </div>
   </header>
 
-  <!-- Quick Number Overlay (สำหรับเวลากดเลขรีโมท) -->
+  <!-- Quick Number Overlay -->
   <div id="channelNumberOverlay" class="fixed top-20 right-8 z-50 bg-rose-600/90 text-white font-black text-3xl px-5 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md hidden border border-rose-400">
     CH <span id="typedChannelNumber"></span>
   </div>
 
   <!-- Main Content -->
   <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
-    <!-- Error Alert -->
     <div id="errorAlert" class="hidden max-w-xl mx-auto mb-6 p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-xs">
       <div class="flex items-center gap-2 font-bold mb-1">
         <i class="fa-solid fa-triangle-exclamation"></i>
@@ -95,93 +92,52 @@
       <p id="errorMessage" class="mb-2">ไม่สามารถดึงข้อมูลรายการช่องได้</p>
     </div>
 
-    <!-- Empty State -->
     <div id="emptyStatus" class="hidden flex-col items-center justify-center py-20 text-gray-500">
       <i class="fa-solid fa-satellite-dish text-4xl mb-4"></i>
       <p class="text-sm">ไม่พบช่องที่ตรงกับคำค้นหาหรือหมวดหมู่นี้</p>
     </div>
 
-    <!-- Channels Grid -->
-    <div id="channelsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-      <!-- Loading Skeletons rendered by default -->
-    </div>
+    <div id="channelsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"></div>
   </main>
 
   <!-- Video Player Modal -->
-  <div id="playerModal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-2 sm:p-4">
-    <div id="modalContentWrapper" class="relative w-full max-w-5xl bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[96vh]">
+  <div id="playerModal" class="fixed inset-0 z-50 bg-black/95 backdrop-blur-md hidden flex items-center justify-center p-0 sm:p-4">
+    <div id="modalContentWrapper" class="relative w-full max-w-4xl bg-gray-900 border-0 sm:border border-gray-800 rounded-none sm:rounded-2xl overflow-hidden shadow-2xl flex flex-col h-full sm:h-auto sm:max-h-[96vh]">
       
-      <!-- Modal Header (Responsive 2-Row on Mobile, 1-Row on Desktop) -->
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-6 py-2.5 sm:py-3 border-b border-gray-800 bg-gray-950 gap-2">
-        
-        <!-- Header Top Row (Channel Info & Prominent Close Button) -->
-        <div class="flex items-center justify-between w-full sm:w-auto">
-          <div class="flex items-center gap-2.5 min-w-0 pr-2">
-            <img id="currentChannelLogo" src="" alt="logo" class="w-7 h-7 sm:w-8 sm:h-8 object-contain rounded bg-gray-800 p-0.5 shrink-0">
-            <div class="min-w-0">
-              <div class="flex items-center gap-1.5 sm:gap-2">
-                <span id="currentChannelNumBadge" class="text-[10px] sm:text-xs bg-rose-600 text-white font-black px-1.5 py-0.2 rounded shrink-0">CH 33</span>
-                <h3 id="currentChannelName" class="text-xs sm:text-base font-bold text-white truncate max-w-[130px] sm:max-w-md">ชื่อช่อง</h3>
-                <button id="modalFavBtn" class="text-gray-400 hover:text-amber-400 transition text-xs sm:text-sm shrink-0">
-                  <i class="fa-regular fa-star"></i>
-                </button>
-              </div>
-              <div class="flex items-center gap-1.5">
-                <span id="currentChannelGroup" class="text-[10px] sm:text-xs text-gray-400 truncate">หมวดหมู่</span>
-                <span id="sourceBadge" class="text-[9px] sm:text-[10px] bg-rose-950/80 text-rose-300 border border-rose-800 px-1 py-0.1 rounded font-mono shrink-0">Source 1</span>
-              </div>
+      <!-- Top Bar: Channel Header + Large Close Target -->
+      <div class="flex items-center justify-between px-4 py-3 bg-gray-950 border-b border-gray-800 shrink-0">
+        <div class="flex items-center gap-3 min-w-0 pr-3">
+          <img id="currentChannelLogo" src="" alt="logo" class="w-8 h-8 object-contain rounded bg-gray-800 p-0.5 shrink-0">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <span id="currentChannelNumBadge" class="text-xs bg-rose-600 text-white font-black px-1.5 py-0.5 rounded shrink-0">CH --</span>
+              <h3 id="currentChannelName" class="text-sm sm:text-base font-bold text-white truncate max-w-[160px] sm:max-w-xs">ชื่อช่อง</h3>
+              <button id="modalFavBtn" class="text-gray-400 hover:text-amber-400 transition text-sm shrink-0">
+                <i class="fa-regular fa-star"></i>
+              </button>
+            </div>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span id="currentChannelGroup" class="text-[11px] text-gray-400 truncate">หมวดหมู่</span>
+              <span id="sourceBadge" class="text-[9px] bg-rose-950/80 text-rose-300 border border-rose-800 px-1.5 py-0.2 rounded font-mono shrink-0">Source 1</span>
             </div>
           </div>
-
-          <!-- Close Button Mobile Position (Always Top-Right and Clickable) -->
-          <button id="closeModalBtn" class="sm:hidden text-gray-400 hover:text-white p-2 bg-gray-800/80 hover:bg-gray-700 rounded-lg transition shrink-0 ml-2">
-            <i class="fa-solid fa-xmark text-lg"></i>
-          </button>
         </div>
 
-        <!-- Header Bottom Row / Controls List (Scrollable on small mobile screens) -->
-        <div class="flex items-center justify-between sm:justify-end gap-1.5 overflow-x-auto custom-scroll pb-1 sm:pb-0 w-full sm:w-auto">
-          <!-- Audio Track Selector -->
-          <select id="audioTrackSelect" class="text-[11px] sm:text-xs bg-gray-800 text-gray-300 border border-gray-700 rounded-lg px-2 py-1 sm:py-1.5 focus:outline-none shrink-0 hidden">
-            <option value="-1">🔊 เสียงหลัก</option>
-          </select>
-
-          <!-- Quality Selector -->
-          <select id="qualitySelect" class="text-[11px] sm:text-xs bg-gray-800 text-rose-400 border border-gray-700 rounded-lg px-2 py-1 sm:py-1.5 font-bold focus:outline-none shrink-0 hidden">
-            <option value="-1">Auto</option>
-          </select>
-
-          <!-- Sleep Timer Selector -->
-          <select id="sleepTimerSelect" class="text-[11px] sm:text-xs bg-gray-800 text-gray-300 border border-gray-700 rounded-lg px-2 py-1 sm:py-1.5 focus:outline-none shrink-0">
-            <option value="0">⏱️ ไม่ตั้งเวลา</option>
-            <option value="15">15 นาที</option>
-            <option value="30">30 นาที</option>
-            <option value="60">60 นาที</option>
-            <option value="90">90 นาที</option>
-          </select>
-
-          <!-- PiP Button -->
-          <button id="pipBtn" title="Picture in Picture" class="text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-gray-700 transition shrink-0">
-            <i class="fa-solid fa-clone"></i>
-          </button>
-
-          <!-- Direct / Proxy Toggle -->
-          <button id="toggleDirectBtn" class="text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-gray-700 transition shrink-0">
-            ผ่าน Proxy
-          </button>
-
-          <!-- Close Button Desktop Position -->
-          <button id="closeModalDesktopBtn" class="hidden sm:inline-flex text-gray-400 hover:text-white p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition ml-1 shrink-0">
-            <i class="fa-solid fa-xmark text-lg"></i>
-          </button>
-        </div>
+        <button id="closeModalBtn" type="button" aria-label="Close" class="w-10 h-10 flex items-center justify-center text-white bg-gray-800 hover:bg-rose-600 rounded-xl transition shrink-0">
+          <i class="fa-solid fa-xmark text-xl pointer-events-none"></i>
+        </button>
       </div>
 
-      <!-- Video Screen -->
-      <div class="relative aspect-video bg-black flex items-center justify-center">
-        <video id="videoPlayer" class="w-full h-full" controls autoplay playsinline></video>
+      <!-- Video Screen Wrapper -->
+      <div class="relative w-full aspect-video bg-black flex items-center justify-center overflow-hidden shrink-0">
+        <video id="videoPlayer" class="w-full h-full object-contain" playsinline preload="auto"></video>
         
-        <div id="playerBuffering" class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2 hidden pointer-events-none">
+        <!-- Center Play/Pause Indicator -->
+        <button id="videoOverlayPlayBtn" class="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition text-white/80 hover:text-white">
+          <i id="playPauseIcon" class="fa-solid fa-circle-play text-5xl drop-shadow-lg opacity-0 transition-opacity duration-200"></i>
+        </button>
+
+        <div id="playerBuffering" class="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 pointer-events-none">
           <i class="fa-solid fa-circle-notch fa-spin text-4xl text-rose-500"></i>
           <span id="bufferingNotice" class="text-xs text-gray-300">กำลังเชื่อมต่อสัญญาณภาพ HD...</span>
         </div>
@@ -201,10 +157,10 @@
         </div>
       </div>
 
-      <!-- Live EPG Bar in Player -->
-      <div class="px-4 sm:px-5 py-2.5 sm:py-3 bg-gray-950 border-t border-gray-800 flex flex-col gap-1.5">
+      <!-- Live EPG Bar -->
+      <div class="px-4 py-2.5 bg-gray-950 border-t border-gray-800 flex flex-col gap-1.5 shrink-0">
         <div class="flex items-center justify-between text-xs">
-          <div class="flex items-center gap-2 truncate">
+          <div class="flex items-center gap-2 truncate pr-2">
             <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white font-bold text-[10px]">LIVE</span>
             <span id="playerEpgCurrentTitle" class="text-white font-medium truncate">กำลังออกอากาศสด...</span>
           </div>
@@ -215,16 +171,51 @@
         </div>
       </div>
 
+      <!-- Dedicated Controls Row (Always cleanly separated from video and header) -->
+      <div class="px-4 py-3 bg-gray-900 border-t border-gray-800 flex items-center justify-between gap-2 overflow-x-auto custom-scroll shrink-0">
+        <div class="flex items-center gap-2 shrink-0">
+          <select id="qualitySelect" class="text-xs bg-gray-800 text-rose-400 border border-gray-700 rounded-lg px-2.5 py-1.5 font-bold focus:outline-none hidden">
+            <option value="-1">Auto (HD)</option>
+          </select>
+
+          <select id="audioTrackSelect" class="text-xs bg-gray-800 text-gray-300 border border-gray-700 rounded-lg px-2 py-1.5 focus:outline-none hidden">
+            <option value="-1">🔊 เสียงหลัก</option>
+          </select>
+
+          <select id="sleepTimerSelect" class="text-xs bg-gray-800 text-gray-300 border border-gray-700 rounded-lg px-2 py-1.5 focus:outline-none shrink-0">
+            <option value="0">⏱️ ไม่ตั้งเวลา</option>
+            <option value="15">15 นาที</option>
+            <option value="30">30 นาที</option>
+            <option value="60">60 นาที</option>
+            <option value="90">90 นาที</option>
+          </select>
+
+          <button id="pipBtn" title="Picture in Picture" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition shrink-0">
+            <i class="fa-solid fa-clone mr-1"></i> PiP
+          </button>
+
+          <button id="toggleDirectBtn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition shrink-0">
+            ผ่าน Proxy
+          </button>
+
+          <button id="fullscreenBtn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition shrink-0">
+            <i class="fa-solid fa-expand mr-1"></i> เต็มจอ
+          </button>
+        </div>
+
+        <div id="sleepTimerNotice" class="hidden text-rose-400 font-mono text-xs shrink-0 pl-2">
+          <i class="fa-regular fa-clock mr-1"></i> ปิดใน: <span id="sleepTimerCountdown">00:00</span>
+        </div>
+      </div>
+
       <!-- Footer Info -->
-      <div class="px-4 sm:px-5 py-2 bg-gray-900 border-t border-gray-800 text-[10px] sm:text-[11px] text-gray-400 flex items-center justify-between">
-        <div class="flex items-center gap-2 sm:gap-4 truncate">
-          <span><kbd class="px-1 sm:px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300">Space</kbd> เล่น/หยุด</span>
-          <span><kbd class="px-1 sm:px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300">F</kbd> เต็มจอ</span>
-          <span class="hidden sm:inline"><kbd class="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300">0-9</kbd> กดเลขช่อง</span>
+      <div class="hidden sm:flex px-4 py-2 bg-gray-950 border-t border-gray-800 text-[11px] text-gray-400 items-center justify-between shrink-0">
+        <div class="flex items-center gap-4">
+          <span><kbd class="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300">Space</kbd> เล่น/หยุด</span>
+          <span><kbd class="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300">F</kbd> เต็มจอ</span>
+          <span><kbd class="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300">0-9</kbd> กดเลขช่อง</span>
         </div>
-        <div id="sleepTimerNotice" class="hidden text-rose-400 font-mono shrink-0">
-          <i class="fa-regular fa-clock mr-1"></i> <span id="sleepTimerCountdown">00:00</span>
-        </div>
+        <span class="text-gray-500">Badbunny TV</span>
       </div>
     </div>
   </div>
@@ -333,10 +324,11 @@
     const typedChannelNumber = document.getElementById('typedChannelNumber');
 
     const playerModal = document.getElementById('playerModal');
-    const modalContentWrapper = document.getElementById('modalContentWrapper');
     const closeModalBtn = document.getElementById('closeModalBtn');
-    const closeModalDesktopBtn = document.getElementById('closeModalDesktopBtn');
     const videoPlayer = document.getElementById('videoPlayer');
+    const videoOverlayPlayBtn = document.getElementById('videoOverlayPlayBtn');
+    const playPauseIcon = document.getElementById('playPauseIcon');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
     const currentChannelLogo = document.getElementById('currentChannelLogo');
     const currentChannelNumBadge = document.getElementById('currentChannelNumBadge');
     const currentChannelName = document.getElementById('currentChannelName');
@@ -777,7 +769,7 @@
         ? activeUrl 
         : `/proxy?url=${encodeURIComponent(activeUrl)}`;
 
-      bufferingNotice.textContent = `กำลังโหลด Source ${currentStreamIndex + 1} (บังคับความคมชัดสูงสุด)...`;
+      bufferingNotice.textContent = `กำลังโหลด Source ${currentStreamIndex + 1}...`;
       playStream(playUrl);
     }
 
@@ -785,7 +777,7 @@
       playerErrorOverlay.classList.add('hidden');
       playerBuffering.classList.remove('hidden');
       qualitySelect.classList.add('hidden');
-      qualitySelect.innerHTML = '<option value="-1">Auto</option>';
+      qualitySelect.innerHTML = '<option value="-1">Auto (HD)</option>';
       audioTrackSelect.classList.add('hidden');
       audioTrackSelect.innerHTML = '<option value="-1">🔊 เสียงหลัก</option>';
 
@@ -810,17 +802,23 @@
           playerBuffering.classList.add('hidden');
 
           if (hlsInstance.levels.length > 0) {
-            const maxLevelIndex = hlsInstance.levels.length - 1;
-            hlsInstance.currentLevel = maxLevelIndex;
-
             qualitySelect.classList.remove('hidden');
             hlsInstance.levels.forEach((level, index) => {
               const opt = document.createElement('option');
               opt.value = index;
-              opt.textContent = `${level.height}p (HD)`;
-              if (index === maxLevelIndex) opt.selected = true;
+              if (level.height && level.height > 0) {
+                opt.textContent = `${level.height}p`;
+              } else if (level.bitrate) {
+                opt.textContent = `${Math.round(level.bitrate / 1000)}k`;
+              } else {
+                opt.textContent = `Source ${index + 1}`;
+              }
               qualitySelect.appendChild(opt);
             });
+
+            const maxIdx = hlsInstance.levels.length - 1;
+            hlsInstance.currentLevel = maxIdx;
+            qualitySelect.value = maxIdx;
           }
 
           if (hlsInstance.audioTracks && hlsInstance.audioTracks.length > 1) {
@@ -897,10 +895,38 @@
       videoPlayer.src = '';
     }
 
-    // Backdrop Click: แตะพื้นหลังสีดำเพื่อปิด Player
+    // Toggle Play/Pause on Video Tap
+    videoOverlayPlayBtn.addEventListener('click', () => {
+      if (videoPlayer.paused) {
+        videoPlayer.play();
+        playPauseIcon.className = 'fa-solid fa-circle-play text-5xl drop-shadow-lg opacity-80';
+      } else {
+        videoPlayer.pause();
+        playPauseIcon.className = 'fa-solid fa-circle-pause text-5xl drop-shadow-lg opacity-80';
+      }
+      setTimeout(() => {
+        playPauseIcon.classList.add('opacity-0');
+      }, 500);
+    });
+
+    // Close Button Direct Click
+    closeModalBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closePlayer();
+    });
+
+    // Backdrop Click
     playerModal.addEventListener('click', (e) => {
       if (e.target === playerModal) {
         closePlayer();
+      }
+    });
+
+    fullscreenBtn.addEventListener('click', () => {
+      if (videoPlayer.requestFullscreen) {
+        videoPlayer.requestFullscreen();
+      } else if (videoPlayer.webkitEnterFullscreen) {
+        videoPlayer.webkitEnterFullscreen(); // For iOS Safari
       }
     });
 
@@ -972,6 +998,7 @@
       searchTimeout = setTimeout(renderChannels, 250);
     });
 
+    // Remote Keypad & D-Pad Keyboard Navigation
     document.addEventListener('keydown', (e) => {
       if (document.activeElement === searchInput) {
         if (e.key === 'ArrowDown') {
@@ -1012,7 +1039,11 @@
           videoPlayer.paused ? videoPlayer.play() : videoPlayer.pause();
         } else if (e.key === 'f' || e.key === 'F') {
           e.preventDefault();
-          document.fullscreenElement ? document.exitFullscreen() : videoPlayer.requestFullscreen();
+          if (videoPlayer.requestFullscreen) {
+            videoPlayer.requestFullscreen();
+          } else if (videoPlayer.webkitEnterFullscreen) {
+            videoPlayer.webkitEnterFullscreen();
+          }
         }
         return;
       }
@@ -1064,8 +1095,6 @@
       cards[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    closeModalBtn.addEventListener('click', closePlayer);
-    closeModalDesktopBtn.addEventListener('click', closePlayer);
     refreshBtn.addEventListener('click', fetchPlaylist);
     mobileRefreshBtn.addEventListener('click', fetchPlaylist);
 
