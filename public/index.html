@@ -221,9 +221,36 @@
     const FALLBACK_M3U_BASE = 'https://raw.githubusercontent.com/Soponwit19997/IPTV/main/Thai%20Digital%20TV';
     const EPG_XML_URL = 'https://raw.githubusercontent.com/tvepg/epg/master/th.xml';
 
+    // ตารางจับคู่ชื่อช่องใน M3U ให้ตรงกับ id ช่องใน XMLTV EPG
+    const EPG_ALIAS_MAP = {
+      '3hd': 'ch3hd',
+      'ch3': 'ch3hd',
+      'channel3': 'ch3hd',
+      'channel5': 'tv5hd',
+      'ch5': 'tv5hd',
+      'ch7': 'ch7hd',
+      'channel7': 'ch7hd',
+      'mcothd': 'mcothd',
+      'mcot': 'mcothd',
+      'ch9': 'mcothd',
+      'nbthd': 'nbthd',
+      'nbt': 'nbthd',
+      'thaipbshd': 'thaipbshd',
+      'thaipbs': 'thaipbshd',
+      'tsports7': 'tsports7',
+      'tptv': 'tptv',
+      'nbt11central': 'nbt11',
+      'tnn16': 'tnn16',
+      'one31': 'one31',
+      'gmm25': 'gmm25',
+      'thairathtv': 'thairathtv',
+      'amarintv': 'amarintv',
+      'workpoint': 'workpoint'
+    };
+
     let channels = [];
     let fallbackSourcesMap = new Map();
-    let epgProgrammes = new Map(); // channel_key -> [{ title, start, stop }]
+    let epgProgrammes = new Map();
     let activeCategory = 'ALL';
     let currentChannelData = null;
     let currentStreamIndex = 0;
@@ -392,7 +419,6 @@
       }
     }
 
-    // ฟังก์ชันดึงและแปลงไฟล์ EPG (XMLTV)
     async function fetchEPGData() {
       try {
         let xmlText = null;
@@ -430,7 +456,6 @@
           }
         }
 
-        // Re-render เมื่อผังรายการโหลดเสร็จเพื่ออัปเดตชื่อรายการบนการ์ด
         renderChannels();
       } catch (err) {
         console.warn("EPG Load Notice: ไม่สามารถดึงผังรายการสดได้", err);
@@ -438,7 +463,6 @@
     }
 
     function parseXMLTVDate(str) {
-      // ฟอร์แมต XMLTV: YYYYMMDDHHMMSS +0700
       const year = parseInt(str.substring(0, 4), 10);
       const month = parseInt(str.substring(4, 6), 10) - 1;
       const day = parseInt(str.substring(6, 8), 10);
@@ -448,10 +472,29 @@
       return new Date(Date.UTC(year, month, day, hour - 7, min, sec)).getTime();
     }
 
+    function normalizeChannelName(rawName) {
+      return rawName
+        .toLowerCase()
+        .replace(/\(1080p\)|\(720p\)|\(576p\)|\(hd\)/g, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim();
+    }
+
     function getCurrentEPG(channel) {
       const now = Date.now();
-      const searchKey = (channel.id || channel.name).toLowerCase();
-      const list = epgProgrammes.get(searchKey);
+      const rawKey = normalizeChannelName(channel.name);
+      const matchedKey = EPG_ALIAS_MAP[rawKey] || rawKey;
+
+      let list = epgProgrammes.get(matchedKey);
+      
+      if (!list) {
+        for (const [key, programmes] of epgProgrammes.entries()) {
+          if (key.includes(matchedKey) || matchedKey.includes(key)) {
+            list = programmes;
+            break;
+          }
+        }
+      }
 
       if (list && list.length > 0) {
         const current = list.find(p => now >= p.start && now < p.stop);
@@ -473,10 +516,10 @@
         }
       }
 
-      // ถ้าไม่มีใน EPG ให้แสดงเป็น Live Stream ปกติ
       const currentMinute = new Date().getMinutes();
+      const cleanName = channel.name.replace(/\(.*\)/, '').trim();
       return {
-        title: "รายการสด (Live Broadcast)",
+        title: `กำลังออกอากาศสด (${cleanName})`,
         timeRange: "Live",
         progress: ((currentMinute % 30) / 30) * 100
       };
@@ -643,7 +686,6 @@
       currentChannelLogo.src = channel.logo || `https://placehold.co/40x40/1f2937/9ca3af?text=TV`;
       sourceBadge.textContent = `Source 1/${currentStreamsList.length}`;
       
-      // Update EPG Bar in Modal
       const epg = getCurrentEPG(channel);
       playerEpgCurrentTitle.textContent = epg.title;
       playerEpgTimeRange.textContent = epg.timeRange;
