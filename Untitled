@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Badbunny TV - Smart Live Stream</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0b0f19">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #f3f4f6;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 9999px;
+    }
+    .tv-focused {
+      border-color: #f43f5e !important;
+      transform: scale(1.04) !important;
+      box-shadow: 0 0 20px rgba(244, 63, 94, 0.4) !important;
+      outline: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col select-none">
+
+  <!-- Header & Navigation -->
+  <header class="sticky top-0 z-40 bg-gray-900/90 backdrop-blur-md border-b border-gray-800 px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center justify-between w-full md:w-auto">
+        <div class="flex items-center gap-3">
+          <i class="fa-solid fa-tv text-rose-500 text-2xl"></i>
+          <h1 class="text-xl font-bold tracking-wide">Badbunny TV</h1>
+        </div>
+        <div class="flex items-center gap-2 md:hidden">
+          <button id="mobileRefreshBtn" class="text-xs bg-gray-800 text-gray-300 p-2 rounded-lg border border-gray-700">
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Search Box & Channel Number Indicator -->
+      <div class="flex items-center gap-3 w-full md:w-auto">
+        <div class="relative flex-1 md:w-80">
+          <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </span>
+          <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="ค้นหาชื่อหรือกดเลขช่อง (เช่น 33, 35)..." 
+            class="w-full bg-gray-950 border border-gray-700 text-sm rounded-xl pl-10 pr-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-rose-500 transition"
+          >
+        </div>
+        <button id="refreshBtn" class="hidden md:flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-2.5 rounded-xl border border-gray-700 transition">
+          <i class="fa-solid fa-rotate-right"></i>
+          <span>รีโหลด</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Category Tabs -->
+    <div class="max-w-7xl mx-auto mt-3">
+      <div id="categoryContainer" class="flex gap-2 overflow-x-auto pb-1 custom-scroll">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </header>
+
+  <!-- Quick Number Overlay (สำหรับเวลากดเลขรีโมท) -->
+  <div id="channelNumberOverlay" class="fixed top-20 right-8 z-50 bg-rose-600/90 text-white font-black text-3xl px-5 py-2.5 rounded-2xl shadow-2xl backdrop-blur-md hidden border border-rose-400">
+    CH <span id="typedChannelNumber"></span>
+  </div>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
+    <!-- Error Alert -->
+    <div id="errorAlert" class="hidden max-w-xl mx-auto mb-6 p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-xs">
+      <div class="flex items-center gap-2 font-bold mb-1">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>แจ้งเตือนสถานะการดึงข้อมูล</span>
+      </div>
+      <p id="errorMessage" class="mb-2">ไม่สามารถดึงข้อมูลรายการช่องได้</p>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyStatus" class="hidden flex-col items-center justify-center py-20 text-gray-500">
+      <i class="fa-solid fa-satellite-dish text-4xl mb-4"></i>
+      <p class="text-sm">ไม่พบช่องที่ตรงกับคำค้นหาหรือหมวดหมู่นี้</p>
+    </div>
+
+    <!-- Channels Grid -->
+    <div id="channelsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <!-- Loading Skeletons rendered by default -->
+    </div>
+  </main>
+
+  <!-- Video Player Modal -->
+  <div id="playerModal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-2 sm:p-4">
+    <div id="modalContentWrapper" class="relative w-full max-w-5xl bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[96vh]">
+      
+      <!-- Modal Header (Responsive 2-Row on Mobile, 1-Row on Desktop) -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between px-3 sm:px-6 py-2.5 sm:py-3 border-b border-gray-800 bg-gray-950 gap-2">
+        
+        <!-- Header Top Row (Channel Info & Prominent Close Button) -->
+        <div class="flex items-center justify-between w-full sm:w-auto">
+          <div class="flex items-center gap-2.5 min-w-0 pr-2">
+            <img id="currentChannelLogo" src="" alt="logo" class="w-7 h-7 sm:w-8 sm:h-8 object-contain rounded bg-gray-800 p-0.5 shrink-0">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5 sm:gap-2">
+                <span id="currentChannelNumBadge" class="text-[10px] sm:text-xs bg-rose-600 text-white font-black px-1.5 py-0.2 rounded shrink-0">CH 33</span>
+                <h3 id="currentChannelName" class="text-xs sm:text-base font-bold text-white truncate max-w-[130px] sm:max-w-md">ชื่อช่อง</h3>
+                <button id="modalFavBtn" class="text-gray-400 hover:text-amber-400 transition text-xs sm:text-sm shrink-0">
+                  <i class="fa-regular fa-star"></i>
+                </button>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span id="currentChannelGroup" class="text-[10px] sm:text-xs text-gray-400 truncate">หมวดหมู่</span>
+                <span id="sourceBadge" class="text-[9px] sm:text-[10px] bg-rose-950/80 text-rose-300 border border-rose-800 px-1 py-0.1 rounded font-mono shrink-0">Source 1</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Close Button Mobile Position (Always Top-Right and Clickable) -->
+          <button id="closeModalBtn" class="sm:hidden text-gray-400 hover:text-white p-2 bg-gray-800/80 hover:bg-gray-700 rounded-lg transition shrink-0 ml-2">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+
+        <!-- Header Bottom Row / Controls List (Scrollable on small mobile screens) -->
+        <div class="flex items-center justify-between sm:justify-end gap-1.5 overflow-x-auto custom-scroll pb-1 sm:pb-0 w-full sm:w-auto">
+          <!-- Audio Track Selector -->
+          <select id="audioTrackSelect" class="text-[11px] sm:text-xs bg-gray-800 text-gray-300 border border-gray-700 rounded-lg px-2 py-1 sm:py-1.5 focus:outline-none shrink-0 hidden">
+            <option value="-1">🔊 เสียงหลัก</option>
+          </select>
+
+          <!-- Quality Selector -->
+          <select id="qualitySelect" class="text-[11px] sm:text-xs bg-gray-800 text-rose-400 border border-gray-700 rounded-lg px-2 py-1 sm:py-1.5 font-bold focus:outline-none shrink-0 hidden">
+            <option value="-1">Auto</option>
+          </select>
+
+          <!-- Sleep Timer Selector -->
+          <select id="sleepTimerSelect" class="text-[11px] sm:text-xs bg-gray-800 text-gray-300 border border-gray-700 rounded-lg px-2 py-1 sm:py-1.5 focus:outline-none shrink-0">
+            <option value="0">⏱️ ไม่ตั้งเวลา</option>
+            <option value="15">15 นาที</option>
+            <option value="30">30 นาที</option>
+            <option value="60">60 นาที</option>
+            <option value="90">90 นาที</option>
+          </select>
+
+          <!-- PiP Button -->
+          <button id="pipBtn" title="Picture in Picture" class="text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-gray-700 transition shrink-0">
+            <i class="fa-solid fa-clone"></i>
+          </button>
+
+          <!-- Direct / Proxy Toggle -->
+          <button id="toggleDirectBtn" class="text-[11px] sm:text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-gray-700 transition shrink-0">
+            ผ่าน Proxy
+          </button>
+
+          <!-- Close Button Desktop Position -->
+          <button id="closeModalDesktopBtn" class="hidden sm:inline-flex text-gray-400 hover:text-white p-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition ml-1 shrink-0">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Video Screen -->
+      <div class="relative aspect-video bg-black flex items-center justify-center">
+        <video id="videoPlayer" class="w-full h-full" controls autoplay playsinline></video>
+        
+        <div id="playerBuffering" class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2 hidden pointer-events-none">
+          <i class="fa-solid fa-circle-notch fa-spin text-4xl text-rose-500"></i>
+          <span id="bufferingNotice" class="text-xs text-gray-300">กำลังเชื่อมต่อสัญญาณภาพ HD...</span>
+        </div>
+
+        <div id="playerErrorOverlay" class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center p-6 text-center hidden">
+          <i class="fa-solid fa-triangle-exclamation text-rose-500 text-3xl mb-2"></i>
+          <p class="text-sm font-semibold text-white mb-1">ไม่สามารถเชื่อมต่อสัญญาณช่องนี้ได้</p>
+          <p id="debugErrorText" class="text-xs text-gray-400 mb-4 max-w-md break-all"></p>
+          <div class="flex items-center gap-3">
+            <button id="switchFallbackBtn" class="text-xs bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg font-medium transition">
+              สลับ Source สำรอง
+            </button>
+            <button id="retryPlayBtn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg font-medium border border-gray-700 transition">
+              ลองใหม่
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live EPG Bar in Player -->
+      <div class="px-4 sm:px-5 py-2.5 sm:py-3 bg-gray-950 border-t border-gray-800 flex flex-col gap-1.5">
+        <div class="flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2 truncate">
+            <span class="px-1.5 py-0.5 rounded bg-rose-600 text-white font-bold text-[10px]">LIVE</span>
+            <span id="playerEpgCurrentTitle" class="text-white font-medium truncate">กำลังออกอากาศสด...</span>
+          </div>
+          <span id="playerEpgTimeRange" class="text-gray-400 text-[11px] font-mono shrink-0">--:-- - --:--</span>
+        </div>
+        <div class="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+          <div id="playerEpgProgressBar" class="bg-rose-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="px-4 sm:px-5 py-2 bg-gray-900 border-t border-gray-800 text-[10px] sm:text-[11px] text-gray-400 flex items-center justify-between">
+        <div class="flex items-center gap-2 sm:gap-4 truncate">
+          <span><kbd class="px-1 sm:px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300">Space</kbd> เล่น/หยุด</span>
+          <span><kbd class="px-1 sm:px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300">F</kbd> เต็มจอ</span>
+          <span class="hidden sm:inline"><kbd class="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-gray-300">0-9</kbd> กดเลขช่อง</span>
+        </div>
+        <div id="sleepTimerNotice" class="hidden text-rose-400 font-mono shrink-0">
+          <i class="fa-regular fa-clock mr-1"></i> <span id="sleepTimerCountdown">00:00</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+      });
+    }
+
+    const PRIMARY_M3U = 'https://raw.githubusercontent.com/Soponwit19997/IPTV/main/Digital_TV.m3u';
+    const FALLBACK_M3U_BASE = 'https://raw.githubusercontent.com/Soponwit19997/IPTV/main/Thai%20Digital%20TV';
+    const EPG_XML_URL = 'https://raw.githubusercontent.com/tvepg/epg/master/th.xml';
+
+    const OFFICIAL_CHANNEL_NUMBERS = {
+      '3hd': 33,
+      'ch3': 33,
+      'channel3': 33,
+      'channel5': 5,
+      'ch5': 5,
+      'ch7': 35,
+      'channel7': 35,
+      'ch7hd': 35,
+      'mcothd': 30,
+      'mcot': 30,
+      'ch9': 30,
+      'nbthd': 2,
+      'nbt': 2,
+      'thaipbshd': 3,
+      'thaipbs': 3,
+      'tsports7': 7,
+      'tptv': 10,
+      'tnn16': 16,
+      'one31': 31,
+      'gmm25': 25,
+      'thairathtv': 32,
+      'amarintv': 34,
+      'workpoint': 23,
+      'nationtv': 22,
+      'pptv': 36
+    };
+
+    const EPG_ALIAS_MAP = {
+      '3hd': 'ch3hd',
+      'ch3': 'ch3hd',
+      'channel3': 'ch3hd',
+      'channel5': 'tv5hd',
+      'ch5': 'tv5hd',
+      'ch7': 'ch7hd',
+      'channel7': 'ch7hd',
+      'ch7hd': 'ch7hd',
+      'mcothd': 'mcothd',
+      'mcot': 'mcothd',
+      'ch9': 'mcothd',
+      'nbthd': 'nbthd',
+      'nbt': 'nbthd',
+      'thaipbshd': 'thaipbshd',
+      'thaipbs': 'thaipbshd',
+      'tsports7': 'tsports7',
+      'tptv': 'tptv',
+      'nbt11central': 'nbt11',
+      'tnn16': 'tnn16',
+      'one31': 'one31',
+      'gmm25': 'gmm25',
+      'thairathtv': 'thairathtv',
+      'amarintv': 'amarintv',
+      'workpoint': 'workpoint'
+    };
+
+    let channels = [];
+    let fallbackSourcesMap = new Map();
+    let epgProgrammes = new Map();
+    let activeCategory = 'ALL';
+    let currentChannelData = null;
+    let currentStreamIndex = 0;
+    let currentStreamsList = [];
+    let isDirectMode = true;
+    let hlsInstance = null;
+    let focusedCardIndex = -1;
+    let searchTimeout = null;
+
+    let typedNumberBuffer = '';
+    let keypadTimeout = null;
+
+    let sleepTimerTimeout = null;
+    let sleepTimerInterval = null;
+    let sleepTimerTargetTime = 0;
+
+    const FAVORITES_KEY = 'badbunnytv_favs';
+    const HISTORY_KEY = 'badbunnytv_history';
+    const VOLUME_KEY = 'badbunnytv_volume';
+
+    let favorites = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
+    let history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+
+    const channelsGrid = document.getElementById('channelsGrid');
+    const emptyStatus = document.getElementById('emptyStatus');
+    const errorAlert = document.getElementById('errorAlert');
+    const errorMessage = document.getElementById('errorMessage');
+    const searchInput = document.getElementById('searchInput');
+    const categoryContainer = document.getElementById('categoryContainer');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const mobileRefreshBtn = document.getElementById('mobileRefreshBtn');
+    const channelNumberOverlay = document.getElementById('channelNumberOverlay');
+    const typedChannelNumber = document.getElementById('typedChannelNumber');
+
+    const playerModal = document.getElementById('playerModal');
+    const modalContentWrapper = document.getElementById('modalContentWrapper');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const closeModalDesktopBtn = document.getElementById('closeModalDesktopBtn');
+    const videoPlayer = document.getElementById('videoPlayer');
+    const currentChannelLogo = document.getElementById('currentChannelLogo');
+    const currentChannelNumBadge = document.getElementById('currentChannelNumBadge');
+    const currentChannelName = document.getElementById('currentChannelName');
+    const currentChannelGroup = document.getElementById('currentChannelGroup');
+    const sourceBadge = document.getElementById('sourceBadge');
+    const modalFavBtn = document.getElementById('modalFavBtn');
+    const qualitySelect = document.getElementById('qualitySelect');
+    const audioTrackSelect = document.getElementById('audioTrackSelect');
+    const pipBtn = document.getElementById('pipBtn');
+    const playerErrorOverlay = document.getElementById('playerErrorOverlay');
+    const playerBuffering = document.getElementById('playerBuffering');
+    const bufferingNotice = document.getElementById('bufferingNotice');
+    const debugErrorText = document.getElementById('debugErrorText');
+    const toggleDirectBtn = document.getElementById('toggleDirectBtn');
+    const switchFallbackBtn = document.getElementById('switchFallbackBtn');
+    const retryPlayBtn = document.getElementById('retryPlayBtn');
+    const sleepTimerSelect = document.getElementById('sleepTimerSelect');
+    const sleepTimerNotice = document.getElementById('sleepTimerNotice');
+    const sleepTimerCountdown = document.getElementById('sleepTimerCountdown');
+    const playerEpgCurrentTitle = document.getElementById('playerEpgCurrentTitle');
+    const playerEpgTimeRange = document.getElementById('playerEpgTimeRange');
+    const playerEpgProgressBar = document.getElementById('playerEpgProgressBar');
+
+    const savedVolume = localStorage.getItem(VOLUME_KEY);
+    if (savedVolume !== null) {
+      videoPlayer.volume = parseFloat(savedVolume);
+    }
+    videoPlayer.addEventListener('volumechange', () => {
+      localStorage.setItem(VOLUME_KEY, videoPlayer.volume.toString());
+    });
+
+    function showSkeletons() {
+      channelsGrid.innerHTML = '';
+      for (let i = 0; i < 12; i++) {
+        const skeleton = document.createElement('div');
+        skeleton.className = 'bg-gray-900 border border-gray-800 rounded-xl p-3 flex flex-col items-center animate-pulse';
+        skeleton.innerHTML = `
+          <div class="w-full aspect-[4/3] bg-gray-800 rounded-lg mb-3"></div>
+          <div class="w-3/4 h-3 bg-gray-800 rounded mb-2"></div>
+          <div class="w-1/2 h-2 bg-gray-800 rounded mb-2"></div>
+          <div class="w-full h-1.5 bg-gray-800 rounded mt-1"></div>
+        `;
+        channelsGrid.appendChild(skeleton);
+      }
+    }
+
+    async function fetchPlaylist() {
+      showSkeletons();
+      errorAlert.classList.add('hidden');
+      emptyStatus.classList.add('hidden');
+
+      let textData = null;
+
+      try {
+        const res = await fetch(PRIMARY_M3U, { cache: 'no-cache' });
+        if (res.ok) textData = await res.text();
+      } catch (err) {
+        console.warn('Direct primary fetch failed:', err);
+      }
+
+      if (!textData) {
+        try {
+          const resProxy = await fetch(`/proxy?url=${encodeURIComponent(PRIMARY_M3U)}`);
+          if (resProxy.ok) textData = await resProxy.text();
+        } catch (proxyErr) {
+          console.error('Proxy primary fetch failed:', proxyErr);
+        }
+      }
+
+      if (textData) {
+        channels = parseM3U(textData);
+        renderCategories();
+        renderChannels();
+        loadFallbackM3ULists();
+        fetchEPGData();
+      } else {
+        channelsGrid.innerHTML = '';
+        errorMessage.textContent = 'ไม่สามารถดึงไฟล์ M3U จาก GitHub ได้';
+        errorAlert.classList.remove('hidden');
+      }
+    }
+
+    function normalizeChannelName(rawName) {
+      return rawName
+        .toLowerCase()
+        .replace(/\(1080p\)|\(720p\)|\(576p\)|\(hd\)/g, '')
+        .replace(/[^a-z0-9]/g, '')
+        .trim();
+    }
+
+    function parseM3U(m3uContent) {
+      const parsedChannels = [];
+      const lines = m3uContent.split(/\r?\n/);
+      let currentInfo = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (line.startsWith('#EXTINF:')) {
+          const nameMatch = line.match(/,(.+)$/);
+          const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+          const groupMatch = line.match(/group-title="([^"]+)"/);
+          const idMatch = line.match(/tvg-id="([^"]+)"/);
+
+          const rawName = nameMatch ? nameMatch[1].trim() : 'ไม่มีชื่อช่อง';
+          const normKey = normalizeChannelName(rawName);
+          const assignedNum = OFFICIAL_CHANNEL_NUMBERS[normKey] || (parsedChannels.length + 1);
+
+          currentInfo = {
+            id: idMatch ? idMatch[1].trim() : '',
+            name: rawName,
+            channelNumber: assignedNum,
+            logo: logoMatch ? logoMatch[1] : '',
+            group: groupMatch ? groupMatch[1].trim() : 'ทั่วไป',
+            url: ''
+          };
+        } else if (line.startsWith('http://') || line.startsWith('https://')) {
+          if (currentInfo) {
+            currentInfo.url = line;
+            parsedChannels.push(currentInfo);
+            currentInfo = null;
+          }
+        }
+      }
+      return parsedChannels;
+    }
+
+    async function loadFallbackM3ULists() {
+      const fallbackIndexes = [1, 2, 3, 6, 12, 13, 14, 16, 17];
+      for (const idx of fallbackIndexes) {
+        try {
+          const url = `${FALLBACK_M3U_BASE}${idx}.m3u`;
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const text = await res.text();
+          const items = parseM3U(text);
+          items.forEach(item => {
+            const list = fallbackSourcesMap.get(item.name) || [];
+            if (!list.includes(item.url)) {
+              list.push(item.url);
+              fallbackSourcesMap.set(item.name, list);
+            }
+          });
+        } catch (e) {}
+      }
+    }
+
+    async function fetchEPGData() {
+      try {
+        let xmlText = null;
+        try {
+          const res = await fetch(EPG_XML_URL);
+          if (res.ok) xmlText = await res.text();
+        } catch (e) {
+          const resProxy = await fetch(`/proxy?url=${encodeURIComponent(EPG_XML_URL)}`);
+          if (resProxy.ok) xmlText = await resProxy.text();
+        }
+
+        if (!xmlText) return;
+
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+        const programmes = xmlDoc.getElementsByTagName("programme");
+
+        epgProgrammes.clear();
+
+        for (let i = 0; i < programmes.length; i++) {
+          const prog = programmes[i];
+          const channelId = prog.getAttribute("channel");
+          const startStr = prog.getAttribute("start");
+          const stopStr = prog.getAttribute("stop");
+          const titleElem = prog.getElementsByTagName("title")[0];
+          const title = titleElem ? titleElem.textContent : "รายการสด";
+
+          if (channelId && startStr && stopStr) {
+            const start = parseXMLTVDate(startStr);
+            const stop = parseXMLTVDate(stopStr);
+
+            const list = epgProgrammes.get(channelId.toLowerCase()) || [];
+            list.push({ title, start, stop });
+            epgProgrammes.set(channelId.toLowerCase(), list);
+          }
+        }
+
+        renderChannels();
+      } catch (err) {
+        console.warn("EPG Load Notice:", err);
+      }
+    }
+
+    function parseXMLTVDate(str) {
+      const year = parseInt(str.substring(0, 4), 10);
+      const month = parseInt(str.substring(4, 6), 10) - 1;
+      const day = parseInt(str.substring(6, 8), 10);
+      const hour = parseInt(str.substring(8, 10), 10);
+      const min = parseInt(str.substring(10, 12), 10);
+      const sec = parseInt(str.substring(12, 14), 10);
+      return new Date(Date.UTC(year, month, day, hour - 7, min, sec)).getTime();
+    }
+
+    function getCurrentEPG(channel) {
+      const now = Date.now();
+      const rawKey = normalizeChannelName(channel.name);
+      const matchedKey = EPG_ALIAS_MAP[rawKey] || rawKey;
+
+      let list = epgProgrammes.get(matchedKey);
+      
+      if (!list) {
+        for (const [key, programmes] of epgProgrammes.entries()) {
+          if (key.includes(matchedKey) || matchedKey.includes(key)) {
+            list = programmes;
+            break;
+          }
+        }
+      }
+
+      if (list && list.length > 0) {
+        const current = list.find(p => now >= p.start && now < p.stop);
+        if (current) {
+          const total = current.stop - current.start;
+          const elapsed = now - current.start;
+          const progress = Math.min(100, Math.max(0, (elapsed / total) * 100));
+
+          const formatTime = (t) => {
+            const d = new Date(t);
+            return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+          };
+
+          return {
+            title: current.title,
+            timeRange: `${formatTime(current.start)} - ${formatTime(current.stop)}`,
+            progress: progress
+          };
+        }
+      }
+
+      const currentMinute = new Date().getMinutes();
+      const cleanName = channel.name.replace(/\(.*\)/, '').trim();
+      return {
+        title: `กำลังออกอากาศสด (${cleanName})`,
+        timeRange: "Live",
+        progress: ((currentMinute % 30) / 30) * 100
+      };
+    }
+
+    function toggleFavorite(channelName, e) {
+      if (e) e.stopPropagation();
+      const index = favorites.indexOf(channelName);
+      if (index === -1) {
+        favorites.push(channelName);
+      } else {
+        favorites.splice(index, 1);
+      }
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+      updateFavIcons();
+      if (activeCategory === 'FAVORITES') {
+        renderChannels();
+      }
+    }
+
+    function addToHistory(channel) {
+      history = history.filter(item => item.name !== channel.name);
+      history.unshift({ 
+        name: channel.name, 
+        logo: channel.logo, 
+        group: channel.group, 
+        url: channel.url, 
+        id: channel.id,
+        channelNumber: channel.channelNumber 
+      });
+      if (history.length > 25) history.pop();
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    }
+
+    function updateFavIcons() {
+      document.querySelectorAll('[data-fav-target]').forEach(btn => {
+        const name = btn.dataset.favTarget;
+        const isFav = favorites.includes(name);
+        btn.innerHTML = `<i class="fa-${isFav ? 'solid text-amber-400' : 'regular text-gray-400'} fa-star"></i>`;
+      });
+      if (currentChannelData) {
+        const isFav = favorites.includes(currentChannelData.name);
+        modalFavBtn.innerHTML = `<i class="fa-${isFav ? 'solid text-amber-400' : 'regular text-gray-400'} fa-star"></i>`;
+      }
+    }
+
+    function renderCategories() {
+      const standardGroups = [...new Set(channels.map(c => c.group).filter(Boolean))];
+      const categories = [
+        { id: 'ALL', label: 'ทั้งหมด' },
+        { id: 'FAVORITES', label: '⭐ รายการโปรด' },
+        { id: 'HISTORY', label: '🕒 ดูก่อนหน้า' },
+        ...standardGroups.map(g => ({ id: g, label: g }))
+      ];
+
+      categoryContainer.innerHTML = '';
+
+      categories.forEach(cat => {
+        const btn = document.createElement('button');
+        const isActive = activeCategory === cat.id;
+        btn.className = `category-btn px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${
+          isActive 
+            ? 'bg-rose-600 text-white shadow-sm' 
+            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+        }`;
+        btn.textContent = cat.label;
+        btn.dataset.category = cat.id;
+
+        btn.addEventListener('click', () => {
+          activeCategory = cat.id;
+          document.querySelectorAll('.category-btn').forEach(b => {
+            b.className = 'category-btn px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition bg-gray-800 text-gray-300 hover:bg-gray-700';
+          });
+          btn.className = 'category-btn px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition bg-rose-600 text-white shadow-sm';
+          renderChannels();
+        });
+
+        categoryContainer.appendChild(btn);
+      });
+    }
+
+    function renderChannels() {
+      const searchTerm = searchInput.value.toLowerCase().trim();
+      let sourceList = channels;
+
+      if (activeCategory === 'FAVORITES') {
+        sourceList = channels.filter(c => favorites.includes(c.name));
+      } else if (activeCategory === 'HISTORY') {
+        sourceList = history;
+      }
+
+      const filtered = sourceList.filter(c => {
+        const matchesCategory = activeCategory === 'ALL' || activeCategory === 'FAVORITES' || activeCategory === 'HISTORY' || c.group === activeCategory;
+        const matchesSearch = c.name.toLowerCase().includes(searchTerm) || c.channelNumber.toString() === searchTerm;
+        return matchesCategory && matchesSearch;
+      });
+
+      channelsGrid.innerHTML = '';
+      focusedCardIndex = -1;
+
+      if (filtered.length === 0) {
+        emptyStatus.classList.remove('hidden');
+        return;
+      }
+      emptyStatus.classList.add('hidden');
+
+      filtered.forEach((ch, idx) => {
+        const card = document.createElement('div');
+        card.tabIndex = 0;
+        card.className = 'channel-card group relative bg-gray-900 border border-gray-800 hover:border-rose-500/60 rounded-xl p-3 flex flex-col justify-between cursor-pointer transition duration-200 transform';
+        card.dataset.index = idx;
+        card.dataset.channelNumber = ch.channelNumber;
+
+        const fallbackImg = `https://placehold.co/120x80/1f2937/9ca3af?text=${encodeURIComponent(ch.name.slice(0, 4))}`;
+        const logoSrc = ch.logo || fallbackImg;
+        const isFav = favorites.includes(ch.name);
+        const epg = getCurrentEPG(ch);
+
+        card.innerHTML = `
+          <div class="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-gray-950/80 border border-gray-700 text-[10px] font-black text-rose-400 z-10 font-mono">
+            ${ch.channelNumber}
+          </div>
+
+          <button class="absolute top-2 right-2 p-1.5 rounded-full bg-gray-950/70 hover:bg-gray-800 transition z-10" data-fav-target="${ch.name}">
+            <i class="fa-${isFav ? 'solid text-amber-400' : 'regular text-gray-400'} fa-star"></i>
+          </button>
+
+          <div class="w-full aspect-[4/3] bg-gray-950 rounded-lg flex items-center justify-center p-3 mb-2 overflow-hidden">
+            <img 
+              src="${logoSrc}" 
+              alt="${ch.name}" 
+              class="max-h-full max-w-full object-contain group-hover:scale-105 transition duration-300"
+              onerror="this.src='${fallbackImg}'"
+              loading="lazy"
+            >
+          </div>
+          <div class="w-full">
+            <div class="flex items-center justify-between gap-1 mb-1">
+              <span class="text-xs font-semibold text-gray-200 group-hover:text-rose-400 truncate" title="${ch.name}">
+                ${ch.name}
+              </span>
+              <span class="inline-block text-[9px] bg-gray-800 text-gray-400 px-1.5 py-0.2 rounded shrink-0">
+                ${ch.group}
+              </span>
+            </div>
+
+            <div class="text-[11px] text-gray-300 truncate mb-1.5" title="${epg.title}">
+              <i class="fa-solid fa-play text-[8px] text-rose-500 mr-1"></i>${epg.title}
+            </div>
+            
+            <div class="w-full bg-gray-800 h-1 rounded-full overflow-hidden">
+              <div class="bg-rose-500 h-full rounded-full" style="width: ${epg.progress}%"></div>
+            </div>
+          </div>
+        `;
+
+        const favBtn = card.querySelector(`[data-fav-target="${ch.name}"]`);
+        favBtn.addEventListener('click', (e) => toggleFavorite(ch.name, e));
+
+        card.addEventListener('click', () => openPlayer(ch));
+        channelsGrid.appendChild(card);
+      });
+    }
+
+    function openPlayer(channel) {
+      currentChannelData = channel;
+      isDirectMode = true;
+
+      const fallbacks = fallbackSourcesMap.get(channel.name) || [];
+      currentStreamsList = [channel.url, ...fallbacks.filter(u => u !== channel.url)];
+      currentStreamIndex = 0;
+
+      currentChannelName.textContent = channel.name;
+      currentChannelGroup.textContent = channel.group;
+      currentChannelNumBadge.textContent = `CH ${channel.channelNumber}`;
+      currentChannelLogo.src = channel.logo || `https://placehold.co/40x40/1f2937/9ca3af?text=TV`;
+      sourceBadge.textContent = `Source 1/${currentStreamsList.length}`;
+      
+      const epg = getCurrentEPG(channel);
+      playerEpgCurrentTitle.textContent = epg.title;
+      playerEpgTimeRange.textContent = epg.timeRange;
+      playerEpgProgressBar.style.width = `${epg.progress}%`;
+
+      toggleDirectBtn.textContent = 'ผ่าน Proxy';
+      playerErrorOverlay.classList.add('hidden');
+      updateFavIcons();
+      addToHistory(channel);
+      playerModal.classList.remove('hidden');
+
+      initiatePlayback();
+    }
+
+    function initiatePlayback() {
+      const activeUrl = currentStreamsList[currentStreamIndex];
+      sourceBadge.textContent = `Source ${currentStreamIndex + 1}/${currentStreamsList.length}`;
+
+      const playUrl = isDirectMode 
+        ? activeUrl 
+        : `/proxy?url=${encodeURIComponent(activeUrl)}`;
+
+      bufferingNotice.textContent = `กำลังโหลด Source ${currentStreamIndex + 1} (บังคับความคมชัดสูงสุด)...`;
+      playStream(playUrl);
+    }
+
+    function playStream(url) {
+      playerErrorOverlay.classList.add('hidden');
+      playerBuffering.classList.remove('hidden');
+      qualitySelect.classList.add('hidden');
+      qualitySelect.innerHTML = '<option value="-1">Auto</option>';
+      audioTrackSelect.classList.add('hidden');
+      audioTrackSelect.innerHTML = '<option value="-1">🔊 เสียงหลัก</option>';
+
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+
+      if (Hls.isSupported()) {
+        hlsInstance = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          manifestLoadingTimeOut: 15000,
+          manifestLoadingMaxRetry: 3,
+          startLevel: -1
+        });
+
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(videoPlayer);
+
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+          playerBuffering.classList.add('hidden');
+
+          if (hlsInstance.levels.length > 0) {
+            const maxLevelIndex = hlsInstance.levels.length - 1;
+            hlsInstance.currentLevel = maxLevelIndex;
+
+            qualitySelect.classList.remove('hidden');
+            hlsInstance.levels.forEach((level, index) => {
+              const opt = document.createElement('option');
+              opt.value = index;
+              opt.textContent = `${level.height}p (HD)`;
+              if (index === maxLevelIndex) opt.selected = true;
+              qualitySelect.appendChild(opt);
+            });
+          }
+
+          if (hlsInstance.audioTracks && hlsInstance.audioTracks.length > 1) {
+            audioTrackSelect.classList.remove('hidden');
+            audioTrackSelect.innerHTML = '';
+            hlsInstance.audioTracks.forEach((track, index) => {
+              const opt = document.createElement('option');
+              opt.value = index;
+              opt.textContent = `🔊 ${track.name || `Track ${index + 1}`}`;
+              if (index === hlsInstance.audioTrack) opt.selected = true;
+              audioTrackSelect.appendChild(opt);
+            });
+          }
+
+          videoPlayer.play().catch(e => console.log('Autoplay handled:', e));
+        });
+
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            console.error('Fatal HLS Error:', data);
+            handlePlaybackFailure(data.details);
+          }
+        });
+      } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+        videoPlayer.src = url;
+        videoPlayer.addEventListener('loadedmetadata', () => {
+          playerBuffering.classList.add('hidden');
+          videoPlayer.play().catch(e => console.log('Autoplay handled:', e));
+        });
+        videoPlayer.addEventListener('error', () => {
+          handlePlaybackFailure('Native HLS error');
+        });
+      } else {
+        playerBuffering.classList.add('hidden');
+        debugErrorText.textContent = 'เบราว์เซอร์นี้ไม่รองรับการเล่น HLS';
+        playerErrorOverlay.classList.remove('hidden');
+      }
+    }
+
+    function handlePlaybackFailure(errorDetail) {
+      if (isDirectMode) {
+        console.warn('Direct stream failed, trying Proxy...');
+        isDirectMode = false;
+        toggleDirectBtn.textContent = 'เล่นตรง';
+        initiatePlayback();
+        return;
+      }
+
+      if (currentStreamIndex < currentStreamsList.length - 1) {
+        console.warn('Switching to next fallback source...');
+        currentStreamIndex++;
+        isDirectMode = true;
+        toggleDirectBtn.textContent = 'ผ่าน Proxy';
+        initiatePlayback();
+        return;
+      }
+
+      playerBuffering.classList.add('hidden');
+      debugErrorText.textContent = `ข้อผิดพลาด: ${errorDetail} (ลองครบ ${currentStreamsList.length} แหล่งแล้ว)`;
+      playerErrorOverlay.classList.remove('hidden');
+    }
+
+    function closePlayer() {
+      playerModal.classList.add('hidden');
+      clearSleepTimer();
+      if (document.pictureInPictureElement) {
+        document.exitPictureInPicture().catch(() => {});
+      }
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+      videoPlayer.pause();
+      videoPlayer.src = '';
+    }
+
+    // Backdrop Click: แตะพื้นหลังสีดำเพื่อปิด Player
+    playerModal.addEventListener('click', (e) => {
+      if (e.target === playerModal) {
+        closePlayer();
+      }
+    });
+
+    function setSleepTimer(minutes) {
+      clearSleepTimer();
+      if (minutes <= 0) return;
+
+      sleepTimerTargetTime = Date.now() + minutes * 60 * 1000;
+      sleepTimerNotice.classList.remove('hidden');
+
+      sleepTimerInterval = setInterval(() => {
+        const remaining = Math.max(0, sleepTimerTargetTime - Date.now());
+        const min = Math.floor(remaining / 60000);
+        const sec = Math.floor((remaining % 60000) / 1000);
+        sleepTimerCountdown.textContent = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+
+        if (remaining <= 0) {
+          clearSleepTimer();
+          closePlayer();
+        }
+      }, 1000);
+    }
+
+    function clearSleepTimer() {
+      if (sleepTimerInterval) clearInterval(sleepTimerInterval);
+      if (sleepTimerTimeout) clearTimeout(sleepTimerTimeout);
+      sleepTimerInterval = null;
+      sleepTimerTimeout = null;
+      sleepTimerNotice.classList.add('hidden');
+      sleepTimerSelect.value = "0";
+    }
+
+    sleepTimerSelect.addEventListener('change', (e) => {
+      setSleepTimer(parseInt(e.target.value, 10));
+    });
+
+    qualitySelect.addEventListener('change', (e) => {
+      if (hlsInstance) {
+        hlsInstance.currentLevel = parseInt(e.target.value, 10);
+      }
+    });
+
+    audioTrackSelect.addEventListener('change', (e) => {
+      if (hlsInstance) {
+        hlsInstance.audioTrack = parseInt(e.target.value, 10);
+      }
+    });
+
+    pipBtn.addEventListener('click', async () => {
+      try {
+        if (videoPlayer !== document.pictureInPictureElement) {
+          await videoPlayer.requestPictureInPicture();
+        } else {
+          await document.exitPictureInPicture();
+        }
+      } catch (err) {
+        console.error('PiP Error:', err);
+      }
+    });
+
+    modalFavBtn.addEventListener('click', () => {
+      if (currentChannelData) {
+        toggleFavorite(currentChannelData.name);
+      }
+    });
+
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(renderChannels, 250);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (document.activeElement === searchInput) {
+        if (e.key === 'ArrowDown') {
+          searchInput.blur();
+          focusCard(0);
+        }
+        return;
+      }
+
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        typedNumberBuffer += e.key;
+        typedChannelNumber.textContent = typedNumberBuffer;
+        channelNumberOverlay.classList.remove('hidden');
+
+        clearTimeout(keypadTimeout);
+        keypadTimeout = setTimeout(() => {
+          const num = parseInt(typedNumberBuffer, 10);
+          typedNumberBuffer = '';
+          channelNumberOverlay.classList.add('hidden');
+
+          const targetChannel = channels.find(c => c.channelNumber === num);
+          if (targetChannel) {
+            openPlayer(targetChannel);
+          }
+        }, 1200);
+        return;
+      }
+
+      const cards = document.querySelectorAll('.channel-card');
+      if (cards.length === 0) return;
+
+      if (!playerModal.classList.contains('hidden')) {
+        if (e.key === 'Escape' || e.key === 'Back' || e.code === 'BrowserBack') {
+          closePlayer();
+        } else if (e.code === 'Space') {
+          e.preventDefault();
+          videoPlayer.paused ? videoPlayer.play() : videoPlayer.pause();
+        } else if (e.key === 'f' || e.key === 'F') {
+          e.preventDefault();
+          document.fullscreenElement ? document.exitFullscreen() : videoPlayer.requestFullscreen();
+        }
+        return;
+      }
+
+      const cols = getGridColumnCount();
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        focusCard(Math.min(cards.length - 1, focusedCardIndex + 1));
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        focusCard(Math.max(0, focusedCardIndex - 1));
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (focusedCardIndex + cols < cards.length) {
+          focusCard(focusedCardIndex + cols);
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (focusedCardIndex - cols >= 0) {
+          focusCard(focusedCardIndex - cols);
+        } else {
+          focusedCardIndex = -1;
+          document.querySelectorAll('.channel-card').forEach(c => c.classList.remove('tv-focused'));
+          searchInput.focus();
+        }
+      } else if (e.key === 'Enter') {
+        if (focusedCardIndex >= 0 && cards[focusedCardIndex]) {
+          cards[focusedCardIndex].click();
+        }
+      }
+    });
+
+    function getGridColumnCount() {
+      const width = window.innerWidth;
+      if (width >= 1280) return 6;
+      if (width >= 1024) return 5;
+      if (width >= 768) return 4;
+      if (width >= 640) return 3;
+      return 2;
+    }
+
+    function focusCard(index) {
+      const cards = document.querySelectorAll('.channel-card');
+      if (!cards[index]) return;
+
+      cards.forEach(c => c.classList.remove('tv-focused'));
+      focusedCardIndex = index;
+      cards[index].classList.add('tv-focused');
+      cards[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    closeModalBtn.addEventListener('click', closePlayer);
+    closeModalDesktopBtn.addEventListener('click', closePlayer);
+    refreshBtn.addEventListener('click', fetchPlaylist);
+    mobileRefreshBtn.addEventListener('click', fetchPlaylist);
+
+    toggleDirectBtn.addEventListener('click', () => {
+      isDirectMode = !isDirectMode;
+      toggleDirectBtn.textContent = isDirectMode ? 'ผ่าน Proxy' : 'เล่นตรง';
+      initiatePlayback();
+    });
+
+    switchFallbackBtn.addEventListener('click', () => {
+      currentStreamIndex = (currentStreamIndex + 1) % currentStreamsList.length;
+      isDirectMode = true;
+      initiatePlayback();
+    });
+
+    retryPlayBtn.addEventListener('click', initiatePlayback);
+
+    fetchPlaylist();
+  </script>
+</body>
+</html>
