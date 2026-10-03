@@ -25,6 +25,10 @@ export async function onRequest(context) {
     headers.set("Referer", `${parsedTarget.protocol}//${parsedTarget.host}/`);
     headers.set("Origin", `${parsedTarget.protocol}//${parsedTarget.host}`);
 
+    // ส่งต่อ Range header สำหรับ Video Streaming
+    const range = request.headers.get("Range");
+    if (range) headers.set("Range", range);
+
     const upstreamResponse = await fetch(targetUrl, {
       method: "GET",
       headers: headers,
