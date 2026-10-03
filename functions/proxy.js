@@ -20,10 +20,8 @@ export async function onRequest(context) {
 
   try {
     const parsedTarget = new URL(targetUrl);
-
-    // จำลอง Header ให้เหมือนเปิดจากเว็บต้นทาง
     const headers = new Headers();
-    headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+    headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
     headers.set("Referer", `${parsedTarget.protocol}//${parsedTarget.host}/`);
     headers.set("Origin", `${parsedTarget.protocol}//${parsedTarget.host}`);
 
@@ -43,7 +41,6 @@ export async function onRequest(context) {
                        contentType.includes("application/vnd.apple.mpegurl") || 
                        contentType.includes("application/x-mpegurl");
 
-    // ถ้าเป็นไฟล์ Playlist (.m3u8) ให้ Rewrite ลิงก์ภายในทุกบรรทัดให้ผ่าน Proxy
     if (isPlaylist) {
       const text = await upstreamResponse.text();
       const baseUrl = targetUrl.substring(0, targetUrl.lastIndexOf("/") + 1);
@@ -51,7 +48,6 @@ export async function onRequest(context) {
       const rewrittenLines = text.split("\n").map((line) => {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith("#")) {
-          // หากบรรทัดมี URI="..." (เช่น คีย์ถอดรหัส หรือ Media Playlist ย่อย)
           if (trimmed.includes('URI="')) {
             return trimmed.replace(/URI="([^"]+)"/g, (match, uri) => {
               const fullUri = uri.startsWith("http") ? uri : new URL(uri, baseUrl).toString();
@@ -61,9 +57,7 @@ export async function onRequest(context) {
           return line;
         }
 
-        // แปลง Relative URL ให้กลายเป็น Absolute URL
         const absoluteUrl = trimmed.startsWith("http") ? trimmed : new URL(trimmed, baseUrl).toString();
-        // บังคับให้โหลด Segment ผ่าน Proxy
         return `${requestUrl.origin}/proxy?url=${encodeURIComponent(absoluteUrl)}`;
       });
 
@@ -79,7 +73,6 @@ export async function onRequest(context) {
       });
     }
 
-    // กรณีเป็น Video Segments (.ts, .m4s, .aac ฯลฯ)
     const responseHeaders = new Headers(upstreamResponse.headers);
     responseHeaders.set("Access-Control-Allow-Origin", "*");
     responseHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
