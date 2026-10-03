@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart TV Web App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #f3f4f6;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header & Navigation -->
+  <header class="sticky top-0 z-40 bg-gray-900/90 backdrop-blur-md border-b border-gray-800 px-4 lg:px-8 py-4">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3 w-full md:w-auto">
+        <i class="fa-solid fa-tv text-rose-500 text-2xl"></i>
+        <h1 class="text-xl font-bold tracking-wide">Digital TV Live</h1>
+        <button id="refreshBtn" class="ml-2 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg border border-gray-700 transition">
+          <i class="fa-solid fa-rotate-right mr-1"></i> โหลดใหม่
+        </button>
+      </div>
+
+      <!-- Search Box -->
+      <div class="relative w-full md:w-80">
+        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </span>
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="ค้นหาชื่อช่อง..." 
+          class="w-full bg-gray-950 border border-gray-700 text-sm rounded-xl pl-10 pr-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-rose-500 transition"
+        >
+      </div>
+    </div>
+
+    <!-- Category Tabs -->
+    <div class="max-w-7xl mx-auto mt-4">
+      <div id="categoryContainer" class="flex gap-2 overflow-x-auto pb-1 custom-scroll">
+        <button class="category-btn active px-4 py-1.5 rounded-full text-xs font-medium bg-rose-600 text-white whitespace-nowrap shadow-sm" data-category="ALL">
+          ทั้งหมด
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 lg:px-8 py-6">
+    <!-- Status & Alerts -->
+    <div id="loadingStatus" class="flex flex-col items-center justify-center py-20 text-gray-400">
+      <i class="fa-solid fa-circle-notch fa-spin text-4xl text-rose-500 mb-4"></i>
+      <p class="text-sm">กำลังดึงรายการช่องจาก GitHub...</p>
+    </div>
+
+    <div id="errorAlert" class="hidden max-w-xl mx-auto mb-6 p-4 rounded-xl bg-red-950/40 border border-red-800 text-red-300 text-xs">
+      <div class="flex items-center gap-2 font-bold mb-1">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <span>แจ้งเตือนการเชื่อมต่อ</span>
+      </div>
+      <p id="errorMessage" class="mb-2">ไม่สามารถดึงข้อมูลสดได้</p>
+    </div>
+
+    <div id="emptyStatus" class="hidden flex-col items-center justify-center py-20 text-gray-500">
+      <i class="fa-solid fa-satellite-dish text-4xl mb-4"></i>
+      <p class="text-sm">ไม่พบช่องที่ตรงกับคำค้นหาหรือหมวดหมู่นี้</p>
+    </div>
+
+    <!-- Channels Grid -->
+    <div id="channelsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"></div>
+  </main>
+
+  <!-- Video Player Modal -->
+  <div id="playerModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="relative w-full max-w-4xl bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between px-5 py-3 border-b border-gray-800 bg-gray-950">
+        <div class="flex items-center gap-3">
+          <img id="currentChannelLogo" src="" alt="logo" class="w-7 h-7 object-contain rounded bg-gray-800 p-0.5">
+          <div>
+            <h3 id="currentChannelName" class="text-sm font-semibold text-white truncate max-w-xs md:max-w-md">ชื่อช่อง</h3>
+            <p id="currentChannelGroup" class="text-xs text-gray-400">หมวดหมู่</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="toggleDirectBtn" class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1 rounded border border-gray-700 transition">
+            สลับเล่นผ่าน Proxy
+          </button>
+          <button id="closeModalBtn" class="text-gray-400 hover:text-white p-2 rounded-lg transition">
+            <i class="fa-solid fa-xmark text-lg"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Video Screen -->
+      <div class="relative aspect-video bg-black flex items-center justify-center">
+        <video id="videoPlayer" class="w-full h-full" controls autoplay playsinline></video>
+        
+        <div id="playerBuffering" class="absolute inset-0 bg-black/60 flex items-center justify-center hidden pointer-events-none">
+          <i class="fa-solid fa-circle-notch fa-spin text-4xl text-rose-500"></i>
+        </div>
+
+        <div id="playerErrorOverlay" class="absolute inset-0 bg-black/90 flex flex-col items-center justify-center p-6 text-center hidden">
+          <i class="fa-solid fa-triangle-exclamation text-rose-500 text-3xl mb-2"></i>
+          <p class="text-sm font-medium text-white mb-2">สัญญาณช่องนี้กำลังออฟไลน์ หรือเซิร์ฟเวอร์ปลายทางปฏิเสธการเชื่อมต่อ</p>
+          <p id="debugErrorText" class="text-xs text-gray-400 mb-4 max-w-md break-all"></p>
+          <button id="retryPlayBtn" class="text-xs bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg font-medium transition">
+            ลองเชื่อมต่อใหม่
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const M3U_URL = 'https://raw.githubusercontent.com/Soponwit19997/IPTV/main/Digital_TV.m3u';
+    let channels = [];
+    let activeCategory = 'ALL';
+    let hlsInstance = null;
+    let currentRawStreamUrl = '';
+    let isDirectMode = true;
+    let hasAutoFallbackTriggered = false;
+
+    // Elements
+    const channelsGrid = document.getElementById('channelsGrid');
+    const loadingStatus = document.getElementById('loadingStatus');
+    const emptyStatus = document.getElementById('emptyStatus');
+    const errorAlert = document.getElementById('errorAlert');
+    const errorMessage = document.getElementById('errorMessage');
+    const searchInput = document.getElementById('searchInput');
+    const categoryContainer = document.getElementById('categoryContainer');
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    const playerModal = document.getElementById('playerModal');
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    const videoPlayer = document.getElementById('videoPlayer');
+    const currentChannelLogo = document.getElementById('currentChannelLogo');
+    const currentChannelName = document.getElementById('currentChannelName');
+    const currentChannelGroup = document.getElementById('currentChannelGroup');
+    const playerErrorOverlay = document.getElementById('playerErrorOverlay');
+    const playerBuffering = document.getElementById('playerBuffering');
+    const debugErrorText = document.getElementById('debugErrorText');
+    const toggleDirectBtn = document.getElementById('toggleDirectBtn');
+    const retryPlayBtn = document.getElementById('retryPlayBtn');
+
+    async function fetchPlaylist() {
+      loadingStatus.classList.remove('hidden');
+      errorAlert.classList.add('hidden');
+      emptyStatus.classList.add('hidden');
+      channelsGrid.innerHTML = '';
+
+      let textData = null;
+
+      try {
+        const res = await fetch(M3U_URL, { cache: 'no-cache' });
+        if (res.ok) {
+          textData = await res.text();
+        }
+      } catch (err) {
+        console.warn('Direct fetch playlist failed:', err);
+      }
+
+      if (!textData) {
+        try {
+          const proxyEndpoint = `/proxy?url=${encodeURIComponent(M3U_URL)}`;
+          const resProxy = await fetch(proxyEndpoint);
+          if (resProxy.ok) {
+            textData = await resProxy.text();
+          }
+        } catch (proxyErr) {
+          console.error('Proxy fetch playlist failed:', proxyErr);
+        }
+      }
+
+      loadingStatus.classList.add('hidden');
+
+      if (textData) {
+        parseM3U(textData);
+        renderCategories();
+        renderChannels();
+      } else {
+        errorMessage.textContent = 'ไม่สามารถดึงไฟล์ M3U จาก GitHub ได้';
+        errorAlert.classList.remove('hidden');
+      }
+    }
+
+    function parseM3U(m3uContent) {
+      channels = [];
+      const lines = m3uContent.split(/\r?\n/);
+      let currentInfo = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (line.startsWith('#EXTINF:')) {
+          const nameMatch = line.match(/,(.+)$/);
+          const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+          const groupMatch = line.match(/group-title="([^"]+)"/);
+
+          currentInfo = {
+            name: nameMatch ? nameMatch[1].trim() : 'ไม่มีชื่อช่อง',
+            logo: logoMatch ? logoMatch[1] : '',
+            group: groupMatch ? groupMatch[1].trim() : 'ทั่วไป',
+            url: ''
+          };
+        } else if (line.startsWith('http://') || line.startsWith('https://')) {
+          if (currentInfo) {
+            currentInfo.url = line;
+            channels.push(currentInfo);
+            currentInfo = null;
+          }
+        }
+      }
+    }
+
+    function renderCategories() {
+      const groups = ['ALL', ...new Set(channels.map(c => c.group).filter(Boolean))];
+      categoryContainer.innerHTML = '';
+
+      groups.forEach(group => {
+        const btn = document.createElement('button');
+        const isActive = activeCategory === group;
+        btn.className = `category-btn px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition ${
+          isActive 
+            ? 'bg-rose-600 text-white shadow-sm' 
+            : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+        }`;
+        btn.textContent = group === 'ALL' ? 'ทั้งหมด' : group;
+        btn.dataset.category = group;
+
+        btn.addEventListener('click', () => {
+          activeCategory = group;
+          document.querySelectorAll('.category-btn').forEach(b => {
+            b.className = 'category-btn px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition bg-gray-800 text-gray-300 hover:bg-gray-700';
+          });
+          btn.className = 'category-btn px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition bg-rose-600 text-white shadow-sm';
+          renderChannels();
+        });
+
+        categoryContainer.appendChild(btn);
+      });
+    }
+
+    function renderChannels() {
+      const searchTerm = searchInput.value.toLowerCase().trim();
+      const filtered = channels.filter(c => {
+        const matchesCategory = activeCategory === 'ALL' || c.group === activeCategory;
+        const matchesSearch = c.name.toLowerCase().includes(searchTerm);
+        return matchesCategory && matchesSearch;
+      });
+
+      channelsGrid.innerHTML = '';
+
+      if (filtered.length === 0) {
+        emptyStatus.classList.remove('hidden');
+        return;
+      }
+      emptyStatus.classList.add('hidden');
+
+      filtered.forEach(ch => {
+        const card = document.createElement('div');
+        card.className = 'group bg-gray-900 border border-gray-800 hover:border-rose-500/60 rounded-xl p-3 flex flex-col items-center justify-between cursor-pointer transition transform hover:-translate-y-1 hover:shadow-lg hover:shadow-rose-950/20';
+
+        const fallbackImg = `https://placehold.co/120x80/1f2937/9ca3af?text=${encodeURIComponent(ch.name.slice(0, 4))}`;
+        const logoSrc = ch.logo || fallbackImg;
+
+        card.innerHTML = `
+          <div class="w-full aspect-[4/3] bg-gray-950 rounded-lg flex items-center justify-center p-3 mb-3 overflow-hidden">
+            <img 
+              src="${logoSrc}" 
+              alt="${ch.name}" 
+              class="max-h-full max-w-full object-contain group-hover:scale-105 transition duration-300"
+              onerror="this.src='${fallbackImg}'"
+              loading="lazy"
+            >
+          </div>
+          <div class="w-full text-center">
+            <div class="text-xs font-semibold text-gray-200 group-hover:text-rose-400 truncate mb-1" title="${ch.name}">
+              ${ch.name}
+            </div>
+            <span class="inline-block text-[10px] bg-gray-800 text-gray-400 px-2 py-0.5 rounded">
+              ${ch.group}
+            </span>
+          </div>
+        `;
+
+        card.addEventListener('click', () => openPlayer(ch));
+        channelsGrid.appendChild(card);
+      });
+    }
+
+    function openPlayer(channel) {
+      currentRawStreamUrl = channel.url;
+      isDirectMode = true;
+      hasAutoFallbackTriggered = false;
+      currentChannelName.textContent = channel.name;
+      currentChannelGroup.textContent = channel.group;
+      currentChannelLogo.src = channel.logo || `https://placehold.co/40x40/1f2937/9ca3af?text=TV`;
+      
+      toggleDirectBtn.textContent = 'สลับเล่นผ่าน Proxy';
+      playerErrorOverlay.classList.add('hidden');
+      playerModal.classList.remove('hidden');
+
+      initiatePlayback();
+    }
+
+    function initiatePlayback() {
+      const playUrl = isDirectMode 
+        ? currentRawStreamUrl 
+        : `/proxy?url=${encodeURIComponent(currentRawStreamUrl)}`;
+
+      playStream(playUrl);
+    }
+
+    function playStream(url) {
+      playerErrorOverlay.classList.add('hidden');
+      playerBuffering.classList.remove('hidden');
+
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+
+      if (Hls.isSupported()) {
+        hlsInstance = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          manifestLoadingTimeOut: 15000,
+          manifestLoadingMaxRetry: 3,
+        });
+
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(videoPlayer);
+
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+          playerBuffering.classList.add('hidden');
+          videoPlayer.play().catch(e => console.log('Autoplay handled:', e));
+        });
+
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            console.error('Fatal HLS Error:', data);
+            
+            // หากเล่นตรงแล้วเจ๊ง ให้สลับไปลองผ่าน Proxy ทันทีอัตโนมัติ
+            if (isDirectMode && !hasAutoFallbackTriggered) {
+              console.warn('Direct stream failed, falling back to Proxy automatically...');
+              hasAutoFallbackTriggered = true;
+              isDirectMode = false;
+              toggleDirectBtn.textContent = 'สลับเล่นตรง (ไม่ผ่าน Proxy)';
+              initiatePlayback();
+              return;
+            }
+
+            playerBuffering.classList.add('hidden');
+            debugErrorText.textContent = `Error Type: ${data.type} (${data.details})`;
+            playerErrorOverlay.classList.remove('hidden');
+          }
+        });
+      } else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+        videoPlayer.src = url;
+        videoPlayer.addEventListener('loadedmetadata', () => {
+          playerBuffering.classList.add('hidden');
+          videoPlayer.play().catch(e => console.log('Autoplay handled:', e));
+        });
+        videoPlayer.addEventListener('error', () => {
+          if (isDirectMode && !hasAutoFallbackTriggered) {
+            hasAutoFallbackTriggered = true;
+            isDirectMode = false;
+            toggleDirectBtn.textContent = 'สลับเล่นตรง (ไม่ผ่าน Proxy)';
+            initiatePlayback();
+            return;
+          }
+          playerBuffering.classList.add('hidden');
+          debugErrorText.textContent = 'Native HLS Load Error';
+          playerErrorOverlay.classList.remove('hidden');
+        });
+      } else {
+        playerBuffering.classList.add('hidden');
+        debugErrorText.textContent = 'เบราว์เซอร์นี้ไม่รองรับการเล่น HLS';
+        playerErrorOverlay.classList.remove('hidden');
+      }
+    }
+
+    function closePlayer() {
+      playerModal.classList.add('hidden');
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+      videoPlayer.pause();
+      videoPlayer.src = '';
+    }
+
+    // Event Listeners
+    closeModalBtn.addEventListener('click', closePlayer);
+    searchInput.addEventListener('input', renderChannels);
+    refreshBtn.addEventListener('click', fetchPlaylist);
+
+    toggleDirectBtn.addEventListener('click', () => {
+      isDirectMode = !isDirectMode;
+      toggleDirectBtn.textContent = isDirectMode ? 'สลับเล่นผ่าน Proxy' : 'สลับเล่นตรง (ไม่ผ่าน Proxy)';
+      initiatePlayback();
+    });
+
+    retryPlayBtn.addEventListener('click', initiatePlayback);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !playerModal.classList.contains('hidden')) {
+        closePlayer();
+      }
+    });
+
+    // เริ่มต้นทำงาน
+    fetchPlaylist();
+  </script>
+</body>
+</html>
